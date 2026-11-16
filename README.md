@@ -2,7 +2,7 @@
 
 Put a sheep's skin on your Android app
 
-# 致谢
+## 致谢
 [@Doraemonliu](https://github.com/Doraemonliu)
 
 <!-- 这个软件从第一个版本发布到现在应该有一年多了，具体哪天发布的我已经忘记了，也懒得去看。
