@@ -1,73 +1,36 @@
 package com.houvven.guise.hook
 
-import com.highcapable.yukihookapi.annotation.xposed.InjectYukiHookWithXposed
-import com.highcapable.yukihookapi.hook.factory.configs
-import com.highcapable.yukihookapi.hook.factory.encase
-import com.highcapable.yukihookapi.hook.log.YLog
-import com.highcapable.yukihookapi.hook.param.PackageParam
-import com.highcapable.yukihookapi.hook.xposed.proxy.IYukiHookXposedInit
-import com.houvven.guise.hook.hooker.NetworkHooker
-import com.houvven.guise.hook.hooker.PackageHooker
-import com.houvven.guise.hook.hooker.PropertiesHooker
-import com.houvven.guise.hook.hooker.ResourceConfigurationHooker
-import com.houvven.guise.hook.hooker.SettingsSecureHooker
-import com.houvven.guise.hook.hooker.TimezoneHooker
-import com.houvven.guise.hook.hooker.WifiHooker
-import com.houvven.guise.hook.hooker.location.CellHooker
-import com.houvven.guise.hook.hooker.location.LocationHooker
-import com.houvven.guise.hook.hooker.system.location.SysLocationHooker
+import android.util.Log
+import com.houvven.guise.hook.hooker.*
+import com.houvven.guise.hook.hooker.location.*
 import com.houvven.guise.hook.store.impl.SharedPreferenceModuleStore
+import com.houvven.guise.hook.util.HookRuntime
+import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
-@InjectYukiHookWithXposed(
-    modulePackageName = "com.houvven.guise",
-    isUsingXposedModuleStatus = true
-)
-object HookEntry : IYukiHookXposedInit {
-
-    override fun onInit() = configs {
-        isDebug = false
-        debugLog {
-            tag = "GuiseHook"
-        }
-    }
-
-    override fun onHook() = encase {
-        loadAppHooker()
-        loadFrameworkHooker()
-    }
-
-    private fun PackageParam.loadAppHooker() {
-        val store = SharedPreferenceModuleStore.Hooked(packageParam = this)
-        val profiles = store.get(mainProcessName)
-        val blackList = listOf("android", "com.android.phone", "com.houvven.guise")
-        if (packageName in blackList) {
+class HookEntry : XposedModule() {
+    override fun onPackageReady(param: PackageReadyParam) {
+        if (!param.isFirstPackage || param.packageName in setOf("android", "com.android.phone", "com.houvven.guise")) return
+        val profiles = runCatching {
+            SharedPreferenceModuleStore.Hooked(getRemotePreferences(SharedPreferenceModuleStore.NAME)).get(param.packageName)
+        }.getOrElse {
+            log(Log.ERROR, "GuiseHook", "Cannot load profiles for ${param.packageName}", it)
             return
         }
-        if (!profiles.isAvailable) {
-            YLog.info("No profiles for $packageName")
-            return
-        }
-        loadApp(
-            isExcludeSelf = true,
-            *listOf(
-                ::PackageHooker,
-                ::ResourceConfigurationHooker,
-                ::LocationHooker,
-                ::CellHooker,
-                ::SettingsSecureHooker,
-                ::TimezoneHooker,
-                ::NetworkHooker,
-                ::WifiHooker
-            ).map { it.invoke(profiles) }
-                .plus(PropertiesHooker(profiles.properties))
-                .toTypedArray()
-        )
-    }
-
-    private fun PackageParam.loadFrameworkHooker() {
-        loadSystem {
-            loadHooker(SysLocationHooker())
+        if (!profiles.isAvailable) return
+        val runtime = HookRuntime(this, param.classLoader, param.packageName)
+        listOf<() -> Unit>(
+            { PropertiesHooker(runtime, profiles.properties).install() },
+            { PackageHooker(runtime, profiles).install() },
+            { ResourceConfigurationHooker(runtime, profiles).install() },
+            { LocationHooker(runtime, profiles).install() },
+            { CellHooker(runtime, profiles).install() },
+            { SettingsSecureHooker(runtime, profiles).install() },
+            { TimezoneHooker(runtime, profiles).install() },
+            { NetworkHooker(runtime, profiles).install() },
+            { WifiHooker(runtime, profiles).install() },
+        ).forEach { install ->
+            runCatching(install).onFailure { runtime.warn("Hook installation failed", it) }
         }
     }
-
 }

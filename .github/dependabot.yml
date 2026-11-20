@@ -1,0 +1,57 @@
+version: 2
+
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "build(deps)"
+    # Keep the requested libxposed API 102 baseline. Patch/minor releases
+    # within 102 remain eligible, including security fixes.
+    ignore:
+      - dependency-name: "io.github.libxposed:api"
+        versions: [">=103.0.0"]
+      - dependency-name: "io.github.libxposed:service"
+        versions: [">=103.0.0"]
+    groups:
+      android-toolchain:
+        patterns:
+          - "com.android.tools.build:gradle"
+          - "com.android.application"
+          - "com.android.library"
+          - "org.jetbrains.kotlin:*"
+          - "org.jetbrains.kotlin.*"
+          - "com.google.devtools.ksp*"
+          - "gradle-wrapper"
+      compose-destinations:
+        patterns: ["io.github.raamcosta.compose-destinations:*"]
+      libxposed:
+        patterns: ["io.github.libxposed:*"]
+      libraries:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
+      security:
+        applies-to: security-updates
+        patterns: ["*"]

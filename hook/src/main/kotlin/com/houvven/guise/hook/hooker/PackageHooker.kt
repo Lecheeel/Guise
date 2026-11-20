@@ -1,47 +1,24 @@
 package com.houvven.guise.hook.hooker
 
 import android.content.pm.PackageInfo
-import com.highcapable.betterandroid.system.extension.tool.SystemVersion
-import com.highcapable.yukihookapi.hook.entity.YukiBaseHooker
-import com.highcapable.yukihookapi.hook.factory.field
-import com.highcapable.yukihookapi.hook.factory.method
-import com.highcapable.yukihookapi.hook.type.android.ApplicationPackageManagerClass
 import com.houvven.guise.hook.profile.HookProfiles
+import com.houvven.guise.hook.util.HookRuntime
 
-internal class PackageHooker(private val profile: HookProfiles) : YukiBaseHooker() {
-
-    override fun onHook() {
-        hookPackageInfoGetter()
-        hookBuildConfig()
-    }
-
-    private fun hookPackageInfoGetter() {
-        ApplicationPackageManagerClass.method { name = "getPackageInfo" }.hookAll().after {
-            val info = result as PackageInfo?
-            if (info != null && info.packageName == packageName) {
-                profile.versionName?.let { info.versionName = it }
-                profile.versionCode?.let {
-                    info.versionCode = it
-                    SystemVersion.require(SystemVersion.P) {
-                        info.longVersionCode = it.toLong()
-                    }
+internal class PackageHooker(private val runtime: HookRuntime, private val profile: HookProfiles) {
+    @Suppress("DEPRECATION")
+    fun install() {
+        if (profile.versionName == null && profile.versionCode == null) return
+        runtime.after("android.app.ApplicationPackageManager", "getPackageInfo") { original, _ ->
+            (original as? PackageInfo)?.apply {
+                if (packageName == runtime.packageName) {
+                    profile.versionName?.let { versionName = it }
+                    profile.versionCode?.let { versionCode = it; if (android.os.Build.VERSION.SDK_INT >= 28) longVersionCode = it.toLong() }
                 }
-            }
+            } ?: original
         }
-    }
-
-    private fun hookBuildConfig() {
-        "$packageName.BuildConfig".toClassOrNull()?.run {
-            profile.versionName?.let {
-                field {
-                    name = "VERSION_NAME"
-                }.ignored().give()?.set(null, it)
-            }
-            profile.versionCode?.let {
-                field {
-                    name = "VERSION_CODE"
-                }.ignored().give()?.set(null, it)
-            }
+        runtime.findClass("${runtime.packageName}.BuildConfig")?.let { type ->
+            profile.versionName?.let { runtime.setField(null, type, "VERSION_NAME", it) }
+            profile.versionCode?.let { runtime.setField(null, type, "VERSION_CODE", it) }
         }
     }
 }

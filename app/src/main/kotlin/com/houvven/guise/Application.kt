@@ -1,7 +1,6 @@
 package com.houvven.guise
 
 import android.util.Log
-import com.houvven.guise.client.LServiceBridgeClient
 import com.houvven.guise.hook.ModuleStatus
 import com.houvven.guise.injection.commonModule
 import com.houvven.guise.injection.profileSuggestModule
@@ -34,7 +33,7 @@ class Application : AndroidApplication() {
             )
         }
 
-        if (ModuleStatus.isLSPosedExecutor) LServiceBridgeClient.start(this)
+        ModuleStatus.initialize(this)
     }
 
     companion object {

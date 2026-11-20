@@ -22,7 +22,7 @@ fun AppListItem(
     colors: ListItemColors = ListItemDefaults.colors()
 ) {
     ListItem(
-        headlineContent = { Text(text = app.name) },
+        content = { Text(text = app.name) },
         supportingContent = { if (app.name != app.packageName) Text(text = app.packageName) },
         leadingContent = {
             Image(

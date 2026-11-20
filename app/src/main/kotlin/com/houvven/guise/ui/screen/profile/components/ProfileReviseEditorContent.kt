@@ -85,7 +85,7 @@ private fun BasicTextReviseEditor(
     }
 
     ListItem(
-        headlineContent = { Text(text = label, style = MaterialTheme.typography.titleLarge) },
+        content = { Text(text = label, style = MaterialTheme.typography.titleLarge) },
         colors = ListItemDefaults.colors(containerColor = Color.Transparent)
     )
 
@@ -119,7 +119,7 @@ private fun BasicTextReviseEditor(
             .padding(vertical = 4.dp),
         shape = MaterialTheme.shapes.medium
     ) {
-        Text(text = stringResource(id = androidx.appcompat.R.string.abc_action_mode_done))
+        Text(text = stringResource(id = R.string.confirm))
     }
 
     SideEffect {
@@ -134,7 +134,7 @@ private fun BasicTextReviseEditor(
             if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
 
         ListItem(
-            headlineContent = { Text(text = suggest.label) },
+            content = { Text(text = suggest.label) },
             modifier = Modifier.clickable { onStagingValueChange.invoke(suggest.value.toString()) },
             colors = ListItemDefaults.colors(containerColor = containerColor)
         )
@@ -272,7 +272,7 @@ fun <T> ProfileReviseEditor.Enum<T>.EditorContent(
                 if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
 
             ListItem(
-                headlineContent = { Text(text = it.label) },
+                content = { Text(text = it.label) },
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.medium)
                     .clickable { onClick(it) }

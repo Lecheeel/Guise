@@ -23,7 +23,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.contentColorFor
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.material3.SheetValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
@@ -56,7 +57,7 @@ fun ProfileRevise(
     dataList: List<ProfileReviseContract> = ProfilesReviseItemsDef,
     columns: Int = 2
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val sheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden, enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded))
     LazyVerticalGrid(
         modifier = modifier,
         columns = GridCells.Fixed(columns),
@@ -113,7 +114,7 @@ private fun ProfileReviseHeader(header: ProfileReviseHeader) {
 @Composable
 private fun ProfileReviseEditorSheet(
     state: ProfileReviseState,
-    sheetState: SheetState = rememberModalBottomSheetState(),
+    sheetState: SheetState = rememberBottomSheetState(initialValue = SheetValue.Hidden),
     containerColor: Color = BottomSheetDefaults.ContainerColor,
     contentColor: Color = contentColorFor(containerColor),
 ) {
@@ -232,10 +233,11 @@ object ProfileReviseDefaults {
 
     val Saver = object : Saver<ProfileReviseState, Bundle> {
         val KEY_PROFILES = "profiles"
+        val KEY_PACKAGE = "package_name"
 
         override fun restore(value: Bundle): ProfileReviseState {
             val profiles = value.getString(KEY_PROFILES, "").let { Profiles.fromJsonStr(it) }
-            return ProfileReviseState(profiles)
+            return ProfileReviseState(profiles.copy(packageName = value.getString(KEY_PACKAGE)))
         }
 
         override fun SaverScope.save(value: ProfileReviseState): Bundle {
@@ -243,6 +245,7 @@ object ProfileReviseDefaults {
             // Save the primitive data types from ProfileReviseState
             val profiles by value.profilesState
             bundle.putString(KEY_PROFILES, profiles.toJsonStr())
+            bundle.putString(KEY_PACKAGE, profiles.packageName)
             return bundle
         }
     }

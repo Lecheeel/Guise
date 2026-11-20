@@ -52,8 +52,8 @@ data class HookProfiles(
     val timezone: String? = null,
 ) : Profile {
 
-    val mcc = simOperator?.substring(0, 3)
-    val mnc = simOperator?.substring(3)
+    val mcc = simOperator?.takeIf { it.length >= 5 }?.take(3)
+    val mnc = simOperator?.takeIf { it.length >= 5 }?.drop(3)
     val tac = lac
 
     val isLocationAvailable get() = listOf(latitude, longitude).any { it != null }

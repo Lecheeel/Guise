@@ -1,148 +1,41 @@
 package com.houvven.guise.hook.hooker
 
 import android.os.Build
-import android.util.Log
-import com.highcapable.yukihookapi.hook.entity.YukiBaseHooker
-import com.highcapable.yukihookapi.hook.factory.classOf
-import com.highcapable.yukihookapi.hook.factory.field
-import com.highcapable.yukihookapi.hook.factory.method
-import com.highcapable.yukihookapi.hook.type.android.BuildClass
 import com.houvven.guise.hook.profile.item.PropertiesProfile
-import com.houvven.guise.hook.util.type.SystemPropertiesClass
+import com.houvven.guise.hook.util.HookRuntime
 
-private const val TAG = "PropertiesHook"
-
-internal class PropertiesHooker(private  val profile: PropertiesProfile) :
-    YukiBaseHooker() {
-
-    private val options = mutableListOf<PropertiesHookOption>()
-
-    init {
-        options.addAll(buildHookOption())
-    }
-
-    override fun onHook() {
-        options.forEach { option ->
-            val (value, fieldName, _, type) = option
-
-            // Hook the value of the field in the Build class
-            if (!fieldName.isNullOrBlank()) {
-                when (type) {
-                    BuildPropAscription.BUILD -> BuildClass
-                    BuildPropAscription.VERSION -> classOf<Build.VERSION>()
-                    BuildPropAscription.VERSION_CODES -> classOf<Build.VERSION_CODES>()
-                    null -> null
-                }?.run {
-                    Log.d(TAG, "hook `Build` class 's static field: $fieldName, value: $value")
-                    field {
-                        name = fieldName
-                        modifiers {
-                            isStatic
-                        }
-                    }.give()?.set(null, value)
-                }
-            }
+internal class PropertiesHooker(private val runtime: HookRuntime, private val profile: PropertiesProfile) {
+    fun install() {
+        val values = listOf(
+            Triple("BRAND", "ro.product.brand", profile.brand),
+            Triple("MANUFACTURER", "ro.product.manufacturer", profile.manufacturer),
+            Triple("MODEL", "ro.product.model", profile.model),
+            Triple("PRODUCT", "ro.product.name", profile.product),
+            Triple("DEVICE", "ro.product.device", profile.device),
+            Triple("DISPLAY", "ro.build.display.id", profile.displayId),
+            Triple("FINGERPRINT", "ro.build.fingerprint", profile.fingerprint),
+        )
+        values.forEach { (field, _, value) ->
+            if (value != null) runtime.setField(null, Build::class.java, field, value)
         }
-
-        // Hook the value of the system properties
-        val associate = options.associate { it.propertiesKey to it.value }
-        SystemPropertiesClass.method {
-            name = "get"
-        }.hookAll {
-            before {
-                val index = args.indexOfFirst { associate.containsKey(it) }
-                if (index != -1) {
-                    val key = args[index]
-                    Log.d(TAG, "hook system properties: $key, value: ${associate[key]}")
-                    result = associate[key]
+        val properties = buildMap {
+            values.forEach { (_, key, value) -> if (value != null) put(key, value) }
+            profile.characteristics?.let { put("ro.build.characteristics", it) }
+            putAll(profile.customProperties)
+        }
+        if (properties.isEmpty()) return
+        runtime.after("android.os.SystemProperties", "get", "getInt", "getLong", "getBoolean") { original, chain ->
+            val value = properties[chain.args.firstOrNull()] ?: return@after original
+            when (chain.executable.name) {
+                "getInt" -> value.toIntOrNull() ?: original
+                "getLong" -> value.toLongOrNull() ?: original
+                "getBoolean" -> when (value.lowercase()) {
+                    "1", "true", "y", "yes", "on" -> true
+                    "0", "false", "n", "no", "off" -> false
+                    else -> original
                 }
-            }
-            after {
-                if (args.any { associate.containsKey(it) }) {
-                    Log.d(TAG, "get system properties: ${args.first()}, value: $result")
-                }
+                else -> value
             }
         }
     }
-
-
-    private fun buildHookOption() = profile.run {
-        mutableListOf(
-            PropertiesHookOption(
-                value = brand,
-                fieldName = "BRAND",
-                propertiesKey = "ro.product.brand",
-                type = BuildPropAscription.BUILD
-            ),
-            PropertiesHookOption(
-                value = manufacturer,
-                fieldName = "MANUFACTURER",
-                propertiesKey = "ro.product.manufacturer",
-                type = BuildPropAscription.BUILD
-            ),
-            PropertiesHookOption(
-                value = model,
-                fieldName = "MODEL",
-                propertiesKey = "ro.product.model",
-                type = BuildPropAscription.BUILD
-            ),
-            PropertiesHookOption(
-                value = product,
-                fieldName = "PRODUCT",
-                propertiesKey = "ro.product.name",
-                type = BuildPropAscription.BUILD
-            ),
-            PropertiesHookOption(
-                value = device,
-                fieldName = "DEVICE",
-                propertiesKey = "ro.product.device",
-                type = BuildPropAscription.BUILD
-            ),
-            PropertiesHookOption(
-                value = displayId,
-                fieldName = "DISPLAY",
-                propertiesKey = "ro.build.display.id",
-                type = BuildPropAscription.BUILD,
-            ),
-            PropertiesHookOption(
-                value = fingerprint,
-                type = BuildPropAscription.BUILD,
-                propertiesKey = "ro.build.fingerprint"
-            ),
-            PropertiesHookOption(
-                value = characteristics,
-                propertiesKey = "ro.build.characteristics"
-            )
-        ).filter { it.value != null }.let {
-            it + customProperties.map { (key, value) ->
-                PropertiesHookOption(
-                    value = value,
-                    propertiesKey = key
-                )
-            }
-        }
-    }
-
-
-    enum class BuildPropAscription {
-        VERSION,
-        VERSION_CODES,
-        BUILD
-    }
-
-    data class PropertiesHookOption(
-        val value: Any?,
-        /**
-         * The field name of [android.os.Build] class. such as `BRAND`, `MODEL`, `PRODUCT`, `DEVICE`
-         */
-        val fieldName: String? = null,
-        /**
-         * The property key of system properties. such as `ro.product.brand`, `ro.product.model`, `ro.product.name`, `ro.product.device`
-         */
-        val propertiesKey: String,
-        /**
-         *Used to mark the attribution of attributes, for example [android.os.Build], [android.os.Build.VERSION], [android.os.Build.VERSION_CODES]
-         */
-        val type: BuildPropAscription? = null
-    )
 }

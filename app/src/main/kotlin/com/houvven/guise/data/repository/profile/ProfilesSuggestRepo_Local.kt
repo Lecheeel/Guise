@@ -1,58 +1,20 @@
 package com.houvven.guise.data.repository.profile
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.net.NetworkCapabilities
 import android.os.Build
 import com.houvven.guise.R
 import com.houvven.guise.data.domain.ProfileSuggest
-import com.houvven.guise.hook.util.type.TelephonyManagerClass
-import org.lsposed.hiddenapibypass.HiddenApiBypass
-import java.lang.reflect.Field
 
 private typealias LocalRepo<T> = ProfilesSuggestRepo.Local<T>
 
 object MobileNetworkTypeRepo : LocalRepo<Int> {
-
-    override fun get(): List<ProfileSuggest<out Int>> {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            HiddenApiBypass.addHiddenApiExemptions("Landroid/telephony/TelephonyManager;")
-        }
-        val types = getNetworkTypes()
-        return types.map { type ->
-            val name = getNetworkTypeName(type)
-            ProfileSuggest(name, type)
-        }
-    }
-
-    @SuppressLint("PrivateApi")
-    @Suppress("UNCHECKED_CAST")
-    private fun getNetworkTypes(): IntArray {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val fields = HiddenApiBypass.getStaticFields(TelephonyManagerClass) as List<Field>
-            fields.find { it.name == "NETWORK_TYPES" }?.run {
-                isAccessible = true
-                get(null) as IntArray?
-            } ?: intArrayOf()
-        } else {
-            TelephonyManagerClass.getDeclaredField("NETWORK_TYPES").get(null) as IntArray
-        }
-    }
-
-    @SuppressLint("PrivateApi")
-    private fun getNetworkTypeName(type: Int): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            HiddenApiBypass.invoke(
-                /* clazz = */         TelephonyManagerClass,
-                /* thiz = */          null,
-                /* methodName = */    "getNetworkTypeName",
-                /* ...args = */       type
-            ) as String
-        } else {
-            val method = TelephonyManagerClass.getDeclaredMethod("getNetworkTypeName")
-            method.invoke(null, type) as String
-        }
-    }
+    // Public Android network-type values; no hidden API exemption is needed.
+    override fun get(): List<ProfileSuggest<out Int>> = listOf(
+        "UNKNOWN", "GPRS", "EDGE", "UMTS", "CDMA", "EVDO_0", "EVDO_A", "1xRTT",
+        "HSDPA", "HSUPA", "HSPA", "IDEN", "EVDO_B", "LTE", "EHRPD", "HSPAP",
+        "GSM", "TD_SCDMA", "IWLAN", "LTE_CA", "NR"
+    ).mapIndexed { value, label -> ProfileSuggest(label, value) }
 }
 
 class NetworkType(context: Context) : LocalRepo<Int> {

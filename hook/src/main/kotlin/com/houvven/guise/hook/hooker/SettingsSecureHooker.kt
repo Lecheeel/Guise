@@ -1,30 +1,19 @@
 package com.houvven.guise.hook.hooker
 
 import android.provider.Settings.Secure
-import com.highcapable.yukihookapi.hook.entity.YukiBaseHooker
-import com.highcapable.yukihookapi.hook.factory.method
-import com.highcapable.yukihookapi.hook.type.android.ContentResolverClass
-import com.highcapable.yukihookapi.hook.type.android.Settings_SecureClass
-import com.highcapable.yukihookapi.hook.type.java.IntType
-import com.highcapable.yukihookapi.hook.type.java.StringClass
 import com.houvven.guise.hook.profile.HookProfiles
+import com.houvven.guise.hook.util.HookRuntime
 
-internal class SettingsSecureHooker(private val profile: HookProfiles) : YukiBaseHooker() {
-
-    override fun onHook() {
-        Settings_SecureClass.method {
-            name = "getStringForUser"
-            param(ContentResolverClass, StringClass, IntType)
-        }.hook().after {
-            val name = args[1] as String
-
-            @Suppress("DEPRECATION")
-            val r =
-                if (name == Secure.LOCATION_MODE && profile.isLocationAvailable) Secure.LOCATION_MODE_HIGH_ACCURACY
-                else if (name == Secure.ANDROID_ID && !profile.ssaid.isNullOrBlank()) profile.ssaid
-                else result
-
-            result = r.toString()
+internal class SettingsSecureHooker(private val runtime: HookRuntime, private val profile: HookProfiles) {
+    @Suppress("DEPRECATION")
+    fun install() {
+        if (profile.ssaid.isNullOrBlank() && !profile.isLocationAvailable) return
+        runtime.after("android.provider.Settings\$Secure", "getString", "getStringForUser") { original, chain ->
+            when (chain.args.getOrNull(1)) {
+                Secure.ANDROID_ID -> profile.ssaid?.takeIf { it.isNotBlank() } ?: original
+                Secure.LOCATION_MODE -> if (profile.isLocationAvailable) Secure.LOCATION_MODE_HIGH_ACCURACY.toString() else original
+                else -> original
+            }
         }
     }
 }

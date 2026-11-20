@@ -1,17 +1,19 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.jetbrains.kotlin.android)
-    alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.parcelize)
 }
 
 android {
     namespace = "com.houvven.guise.hook"
-    compileSdk = 34
+    compileSdk {
+        version = release(37) { minorApiLevel = 1 }
+    }
 
     defaultConfig {
-        minSdk = 24
+        minSdk = 26
         consumerProguardFiles("consumer-rules.pro")
     }
 
@@ -28,9 +30,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.majorVersion
-    }
     buildFeatures {
         buildConfig = true
     }
@@ -39,10 +38,14 @@ android {
 dependencies {
     implementation(libs.androidx.core.ktx)
 
-    implementation(libs.yuki.api)
-    compileOnlyApi(libs.xposed.api)
-    ksp(libs.yuki.ksp.xposed)
+    compileOnly(libs.xposed.api)
+    implementation(libs.xposed.service)
 
     implementation(libs.kotlin.serialization.json)
-    implementation(libs.betterandroid.extension.system)
+    implementation(libs.kotlin.coroutines.android)
+}
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }

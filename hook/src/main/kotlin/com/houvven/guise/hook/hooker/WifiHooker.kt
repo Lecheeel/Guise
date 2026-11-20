@@ -1,52 +1,20 @@
 package com.houvven.guise.hook.hooker
 
 import android.net.NetworkCapabilities
-import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
-import com.highcapable.yukihookapi.hook.entity.YukiBaseHooker
-import com.highcapable.yukihookapi.hook.factory.classOf
-import com.highcapable.yukihookapi.hook.factory.current
-import com.highcapable.yukihookapi.hook.factory.method
 import com.houvven.guise.hook.profile.HookProfiles
-import com.houvven.guise.hook.util.type.WifiManagerClass
+import com.houvven.guise.hook.util.HookRuntime
 
-internal class WifiHooker(private val profiles: HookProfiles) : YukiBaseHooker() {
-
-    override fun onHook() {
-        hookWifiState()
-        hookConnectionInfo()
-    }
-
-    private fun hookConnectionInfo() {
-        val (wifiSsid, wifiBssid, wifiMac) = profiles.run {
-            if (disableWifiLocation) listOf(UNKNOWN_SSID, DEFAULT_MAC_ADDRESS, DEFAULT_MAC_ADDRESS)
-            else listOf(wifiSsid, wifiBssid, wifiMac)
-        }
-
-        wifiSsid?.let {
-            classOf<WifiInfo>().method { name = "getSSID" }.hook().replaceTo("\"$it\"")
-        }
-
-        WifiManagerClass.method {
-            name = "getConnectionInfo"
-        }.hook().after {
-            result?.current {
-                wifiBssid?.let { field { name = "mBSSID" }.set(it) }
-                wifiMac?.let { field { name = "mMacAddress" }.set(it) }
-            }
-        }
-    }
-
-    private fun hookWifiState() {
+internal class WifiHooker(private val runtime: HookRuntime, private val profiles: HookProfiles) {
+    fun install() {
+        val ssid = if (profiles.disableWifiLocation) "<unknown ssid>" else profiles.wifiSsid
+        val bssid = if (profiles.disableWifiLocation) "02:00:00:00:00:00" else profiles.wifiBssid
+        val mac = if (profiles.disableWifiLocation) "02:00:00:00:00:00" else profiles.wifiMac
+        ssid?.let { value -> runtime.replace("android.net.wifi.WifiInfo", "getSSID") { if (value == "<unknown ssid>") value else "\"$value\"" } }
+        bssid?.let { value -> runtime.replace("android.net.wifi.WifiInfo", "getBSSID") { value } }
+        mac?.let { value -> runtime.replace("android.net.wifi.WifiInfo", "getMacAddress") { value } }
         if (profiles.networkType == NetworkCapabilities.TRANSPORT_WIFI) {
-            WifiManagerClass.method {
-                name = "getWifiState"
-            }.hook().replaceTo(WifiManager.WIFI_STATE_ENABLED)
+            runtime.replace("android.net.wifi.WifiManager", "getWifiState") { WifiManager.WIFI_STATE_ENABLED }
         }
-    }
-
-    companion object {
-        const val UNKNOWN_SSID = "<unknown ssid>"
-        const val DEFAULT_MAC_ADDRESS = "02:00:00:00:00:00"
     }
 }

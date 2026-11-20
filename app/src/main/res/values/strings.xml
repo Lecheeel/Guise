@@ -2,7 +2,7 @@
     <string name="app_name" translatable="false">Guise</string>
     <string name="home">Home</string>
     <string name="module_inactive">Inactive</string>
-    <string name="module_inactive_desc">Please enable the module first. If u are using `ROOT free` framework, please go this app\'s settings to select work mode.</string>
+    <string name="module_inactive_desc">Enable Guise in a framework supporting libxposed API 102 and remote preferences, then reopen the app.</string>
     <string name="module_version">Module Version</string>
     <string name="android_version">Android Version</string>
     <string name="os_version">OS Version</string>
@@ -26,7 +26,11 @@
     <string name="turn_off">Turn Off</string>
     <string name="copy_to_clipboard">Copy to clipboard</string>
     <string name="import_from_clipboard">Import from clipboard</string>
-    <string name="lservice_error_title">LService Error</string>
-    <string name="lservice_description">The service for LSPosed scope synchronization is only supported on LSPosed.</string>
     <string name="ok">OK</string>
+    <string name="framework_unavailable">Profiles saved locally. Reopen Guise after enabling the module to synchronize them.</string>
+    <string name="scope_approved">Scope approved. Restart the target app to apply the profile.</string>
+    <string name="scope_failed">Scope update failed or was declined. Check the selected apps in your framework manager.</string>
+    <string name="profile_saved">Profile saved. Approve any scope request, then restart the target app.</string>
+    <string name="profile_save_failed">Could not save or synchronize the profile. Reopen Guise and try again.</string>
+    <string name="module_description">Customize device and app information per application.</string>
 </resources>

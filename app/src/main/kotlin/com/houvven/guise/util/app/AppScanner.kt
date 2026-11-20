@@ -117,7 +117,7 @@ class AppScanner(
      * Creates an [App] from the specified [PackageInfo].
      */
     private fun createApp(pi: PackageInfo) = pi.run {
-        val applicationInfo = applicationInfo
+        val applicationInfo = applicationInfo ?: packageManager.getApplicationInfo(packageName, 0)
         App(
             name = applicationInfo.loadLabel(packageManager).toString(),
             packageName = packageName,

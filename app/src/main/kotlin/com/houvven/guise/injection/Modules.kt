@@ -5,14 +5,13 @@ import com.houvven.guise.data.AppsStore
 import com.houvven.guise.data.repository.profile.NetworkType
 import com.houvven.guise.data.repository.profile.ProfilesSuggestRepo_Enum
 import com.houvven.guise.hook.store.ModuleStore
-import com.houvven.guise.hook.store.impl.MediaModuleStore
 import com.houvven.guise.hook.store.impl.SharedPreferenceModuleStore
 import com.houvven.guise.ui.screen.launch.home.HomeViewModel
 import com.houvven.guise.ui.screen.launch.person.PersonViewModel
 import com.houvven.guise.ui.screen.profile.AppProfileReviseViewModel
 import com.houvven.guise.util.app.AppScanner
 import org.koin.android.ext.koin.androidContext
-import org.koin.androidx.viewmodel.dsl.viewModelOf
+import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
 val commonModule = module {
@@ -35,12 +34,7 @@ val storeModule = module {
     }
     // ModuleStore
     single<ModuleStore.Hooker> {
-        val isUsingNRootFramework = false
-        if (isUsingNRootFramework) {
-            MediaModuleStore.Hooker()
-        } else {
-            SharedPreferenceModuleStore.Hooker(androidContext())
-        }
+        SharedPreferenceModuleStore.Hooker(androidContext())
     }
 }
 

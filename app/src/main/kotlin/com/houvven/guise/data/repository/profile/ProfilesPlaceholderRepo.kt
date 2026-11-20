@@ -6,7 +6,7 @@ import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.highcapable.betterandroid.system.extension.tool.SystemProperties
+import com.highcapable.betterandroid.system.extension.utils.SystemProperties
 import com.houvven.guise.hook.profile.HookProfiles
 import com.houvven.guise.hook.profile.item.PropertiesProfile
 import com.houvven.guise.util.app.App

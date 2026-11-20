@@ -1,5 +1,6 @@
 package com.houvven.guise.ui.screen.launch
 
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -40,12 +41,13 @@ private enum class MainBottomBarNavDestination(
 @Destination<RootGraph>(start = true)
 @Composable
 fun MainScreen() {
+    val moduleActive by ModuleStatus.active.collectAsStateWithLifecycle()
     var currentDestination by rememberSaveable {
         mutableStateOf(MainBottomBarNavDestination.start)
     }
 
     val bottomBar: @Composable () -> Unit = {
-        if (ModuleStatus.isModuleActive) {
+        if (moduleActive) {
             GuiseAppBottomBar(currentDestination.name) {
                 currentDestination = MainBottomBarNavDestination.valueOf(it)
             }

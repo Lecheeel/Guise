@@ -1,19 +1,14 @@
 package com.houvven.guise.hook.hooker
 
-import com.highcapable.yukihookapi.hook.entity.YukiBaseHooker
-import com.highcapable.yukihookapi.hook.factory.method
-import com.highcapable.yukihookapi.hook.type.java.TimeZoneClass
 import com.houvven.guise.hook.profile.HookProfiles
+import com.houvven.guise.hook.util.HookRuntime
 import java.util.TimeZone
 
-internal class TimezoneHooker(private val profile: HookProfiles) : YukiBaseHooker() {
-
-
-    override fun onHook() {
-        profile.timezone?.let {
-            TimeZoneClass.method {
-                name = "getDefaultRef"
-            }.hook().replaceTo(TimeZone.getTimeZone(profile.timezone))
+internal class TimezoneHooker(private val runtime: HookRuntime, private val profile: HookProfiles) {
+    fun install() {
+        profile.timezone?.let { id ->
+            runtime.replace("java.util.TimeZone", "getDefault") { TimeZone.getTimeZone(id) }
+            runtime.replace("java.util.TimeZone", "getDefaultRef") { TimeZone.getTimeZone(id) }
         }
     }
 }

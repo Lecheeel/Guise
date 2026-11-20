@@ -7,7 +7,7 @@ import com.houvven.guise.ui.LocalNavHostController
 import com.houvven.guise.util.app.App
 import com.houvven.guise.util.navigateDirection
 import com.ramcosta.composedestinations.generated.destinations.AppProfileReviseRouteDestination
-import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.viewmodel.koinViewModel
 
 /**
  * Screen's coordinator which is responsible for handling actions from the UI layer

@@ -1,53 +1,25 @@
 package com.houvven.guise.hook.hooker
 
-import android.content.res.Configuration.UI_MODE_NIGHT_NO
-import android.content.res.Configuration.UI_MODE_NIGHT_YES
+import android.content.res.Configuration
 import android.os.LocaleList
-import com.highcapable.yukihookapi.hook.entity.YukiBaseHooker
-import com.highcapable.yukihookapi.hook.factory.current
-import com.highcapable.yukihookapi.hook.factory.method
-import com.highcapable.yukihookapi.hook.type.android.ResourcesClass
 import com.houvven.guise.hook.profile.HookProfiles
+import com.houvven.guise.hook.util.HookRuntime
 import java.util.Locale
 
-internal class ResourceConfigurationHooker(private val profile: HookProfiles) : YukiBaseHooker() {
-
-    override fun onHook() {
-        this.hookResourceGetter()
-    }
-
-    private fun hookResourceGetter() {
-        val locale = profile.language?.let { stringToLocale(it) }
-        val uiMode = profile.nightMode?.let { isNightModeToUiMode(it) }
-        val dpi = profile.densityDpi
-        val fontScale = profile.fontScale
-
-        ResourcesClass.method {
-            name = "getConfiguration"
-        }.hookAll().after {
-            result?.current(ignored = true) {
-                locale?.let {
-                    field { name = "mLocaleList" }.set(LocaleList(it))
-                    field { name = "locale" }.set(it)
+internal class ResourceConfigurationHooker(private val runtime: HookRuntime, private val profile: HookProfiles) {
+    fun install() {
+        if (profile.language == null && profile.nightMode == null && profile.densityDpi == null && profile.fontScale == null) return
+        runtime.after("android.content.res.Resources", "getConfiguration") { original, _ ->
+            val configuration = original as? Configuration ?: return@after original
+            Configuration(configuration).apply {
+                profile.language?.let { setLocales(LocaleList(Locale.forLanguageTag(it.replace('_', '-')))) }
+                profile.nightMode?.let {
+                    uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+                        if (it) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
                 }
-                uiMode?.let { field { name = "uiMode" }.set(it) }
-                dpi?.let { field { name = "densityDpi" }.set(dpi) }
-                fontScale?.let { field { name = "fontScale" }.set(fontScale) }
+                profile.densityDpi?.let { densityDpi = it }
+                profile.fontScale?.let { fontScale = it }
             }
         }
-    }
-
-    private fun stringToLocale(string: String): Locale {
-        val parts = string.split("_")
-        return when (parts.size) {
-            1 -> Locale(parts[0])
-            2 -> Locale(parts[0], parts[1])
-            3 -> Locale(parts[0], parts[1], parts[2])
-            else -> throw IllegalArgumentException("Invalid locale string: $string")
-        }
-    }
-
-    private fun isNightModeToUiMode(isNightMode: Boolean): Int {
-        return if (isNightMode) UI_MODE_NIGHT_YES else UI_MODE_NIGHT_NO
     }
 }

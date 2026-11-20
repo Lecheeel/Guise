@@ -38,6 +38,7 @@ fun HomeScreen(
     actions: HomeActions,
     appsStore: AppsStore = koinInject()
 ) {
+    val moduleActive by ModuleStatus.active.collectAsStateWithLifecycle()
     Scaffold(
         topBar = { HomeScreenTopBar(state, actions) }
     ) { innerPaddings ->
@@ -48,7 +49,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (ModuleStatus.isModuleActive) {
+            if (moduleActive) {
                 AppLazyColumn(
                     state = state,
                     actions = actions,

@@ -1,50 +1,48 @@
 package com.houvven.guise.hook.store.impl
 
 import android.content.Context
-import com.highcapable.yukihookapi.hook.factory.prefs
-import com.highcapable.yukihookapi.hook.param.PackageParam
-import com.highcapable.yukihookapi.hook.xposed.prefs.YukiHookPrefsBridge
+import android.content.SharedPreferences
+import com.houvven.guise.hook.ModuleStatus
 import com.houvven.guise.hook.profile.HookProfiles
 import com.houvven.guise.hook.store.ModuleStore
+import io.github.libxposed.service.XposedService
 
 object SharedPreferenceModuleStore {
+    const val NAME = "guise.hook.profiles"
+    private val lock = Any()
 
+    /** Keep the original private preferences as a durable local copy and migration source. */
     class Hooker(context: Context) : ModuleStore.Hooker() {
-
-        private val prefs: YukiHookPrefsBridge = context.prefs(name)
+        private val prefs = context.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
         override val configuredPackages: Set<String>
-            get() = prefs.all().keys
+            get() = prefs.all.filterValues { it is String }.keys
 
-        override fun set(profiles: HookProfiles) {
-            prefs.edit {
-                with(profiles) {
-                    if (isAvailable) putString(packageName!!, profiles.toJsonStr())
-                    else remove(packageName!!)
-                }
-            }
+        override fun set(profiles: HookProfiles) = synchronized(lock) {
+            val packageName = requireNotNull(profiles.packageName)
+            val editor = prefs.edit()
+            if (profiles.isAvailable) editor.putString(packageName, profiles.toJsonStr())
+            else editor.remove(packageName)
+            check(editor.commit()) { "Could not save profiles" }
+            ModuleStatus.service?.let { syncTo(it) }
+            Unit
         }
 
-        override fun get(packageName: String): HookProfiles {
-            return HookProfiles.fromJsonStr(prefs.getString(packageName))
+        fun syncTo(service: XposedService) = synchronized(lock) {
+            val editor = service.getRemotePreferences(NAME).edit().clear()
+            prefs.all.forEach { (key, value) -> if (value is String) editor.putString(key, value) }
+            check(editor.commit()) { "Could not synchronize profiles to Xposed" }
         }
 
-        override fun isEnabled(packageName: String): Boolean {
-            return prefs.contains(packageName)
-        }
+        override fun get(packageName: String) = decode(prefs, packageName)
+        override fun isEnabled(packageName: String) = prefs.contains(packageName)
     }
 
-
-    class Hooked(packageParam: PackageParam) : ModuleStore.Hooked() {
-
-        private val prefs: YukiHookPrefsBridge = packageParam.prefs(name)
-
-        override fun get(packageName: String): HookProfiles {
-            return HookProfiles.fromJsonStr(prefs.getString(packageName))
-        }
-
-        override fun isEnabled(packageName: String): Boolean {
-            return prefs.contains(packageName)
-        }
+    class Hooked(private val prefs: SharedPreferences) : ModuleStore.Hooked() {
+        override fun get(packageName: String) = decode(prefs, packageName)
+        override fun isEnabled(packageName: String) = prefs.contains(packageName)
     }
+
+    private fun decode(prefs: SharedPreferences, packageName: String): HookProfiles =
+        HookProfiles.fromJsonStr(prefs.getString(packageName, null).orEmpty()).copy(packageName = packageName)
 }
