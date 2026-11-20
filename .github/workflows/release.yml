@@ -1,0 +1,196 @@
+name: Signed release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to build and publish (for example v2.0.0-alpha.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+      commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - name: Validate version tag
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          tag = os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?', tag):
+              raise SystemExit('Expected a version tag such as v2.0.0-alpha.1')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tag={tag}\nversion={tag[1:]}\n')
+          PY
+
+      - name: Check out tagged source
+        id: source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.version.outputs.tag }}
+          persist-credentials: false
+
+      - name: Check committed version
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          properties = dict(line.split('=', 1) for line in Path('app/version.properties').read_text().splitlines() if '=' in line)
+          if properties['version.name'] != os.environ['RELEASE_VERSION']:
+              raise SystemExit('Tag and committed application version must match')
+          PY
+
+      - name: Set up Java
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+
+      - name: Install Android build packages
+        run: sdkmanager "platforms;android-37.1" "build-tools;36.0.0"
+
+      - name: Set up Gradle and validate Wrapper
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
+          validate-wrappers: true
+
+      - name: Restore release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          python3 - <<'PY'
+          import base64, os
+          from pathlib import Path
+          path = Path(os.environ['RUNNER_TEMP']) / 'guise-release.p12'
+          path.write_bytes(base64.b64decode(os.environ['ANDROID_KEYSTORE_BASE64'], validate=True))
+          path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'], 'a') as environment:
+              environment.write(f'SIGNING_KEYSTORE_PATH={path}\n')
+          PY
+
+      - name: Build optimized, signed APKs and run release Lint
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >-
+          bash ./gradlew clean :app:assembleRelease :app:lintRelease
+          -PreleaseAbis=x86,arm64-v8a,armeabi-v7a -PrequireReleaseSigning=true
+          --no-configuration-cache --console=plain
+
+      - name: Export public certificate
+        env:
+          SIGNING_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          mkdir -p build
+          keytool -exportcert -rfc -keystore "$SIGNING_KEYSTORE_PATH" \
+            -alias "$SIGNING_KEY_ALIAS" -storepass:env SIGNING_STORE_PASSWORD \
+            -file build/signing-certificate.pem
+
+      - name: Verify signatures, ABI, alignment, version and R8 output
+        run: >-
+          python3 script/prepare_release.py --build-tools "$ANDROID_HOME/build-tools/36.0.0"
+          --certificate build/signing-certificate.pem
+
+      - name: Upload verified release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signed-release-${{ github.run_id }}
+          path: build/release/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Retain R8 mapping for crash analysis
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: r8-mapping-${{ steps.version.outputs.tag }}
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Remove private keystore
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          (Path(os.environ['RUNNER_TEMP']) / 'guise-release.p12').unlink(missing_ok=True)
+          PY
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified release assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: signed-release-${{ github.run_id }}
+          path: release
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          repo, tag, version = (os.environ[key] for key in ('GH_REPO', 'RELEASE_TAG', 'RELEASE_VERSION'))
+          def gh(*arguments):
+              return subprocess.check_output(['gh', *arguments], text=True)
+          remote_commit = json.loads(gh('api', f'repos/{repo}/commits/{tag}'))['sha']
+          if remote_commit != os.environ['RELEASE_COMMIT']:
+              raise SystemExit('Tag moved after the build; refusing publication')
+          directory = Path('release')
+          manifest = json.loads((directory / 'release-manifest.json').read_text())
+          expected = {f'Guise-{version}-{abi}.apk' for abi in ('x86', 'arm64-v8a', 'armeabi-v7a')}
+          if manifest['version'] != version or {entry['file'] for entry in manifest['apks']} != expected:
+              raise SystemExit('Unexpected release assets')
+          for entry in manifest['apks']:
+              if hashlib.sha256((directory / entry['file']).read_bytes()).hexdigest() != entry['sha256']:
+                  raise SystemExit('APK checksum mismatch')
+          existing = subprocess.run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'isDraft'], capture_output=True, text=True)
+          if existing.returncode == 0:
+              if not json.loads(existing.stdout)['isDraft']:
+                  raise SystemExit('Release is already published; refusing to overwrite it')
+          else:
+              gh('release', 'create', tag, '--repo', repo, '--verify-tag', '--draft',
+                 '--title', f'Guise {version}', '--notes-file', str(directory / 'RELEASE_NOTES.md'))
+          assets = [str(directory / name) for name in sorted(expected)]
+          assets += [str(directory / name) for name in ('signing-certificate.pem', 'SHA256SUMS.txt', 'release-manifest.json')]
+          gh('release', 'upload', tag, '--repo', repo, '--clobber', *assets)
+          gh('release', 'edit', tag, '--repo', repo, '--draft=false',
+             f'--prerelease={str("-" in version).lower()}', f'--latest={str("-" not in version).lower()}')
+          print(f'Published https://github.com/{repo}/releases/tag/{tag}')
+          PY
