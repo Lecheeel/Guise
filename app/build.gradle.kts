@@ -9,6 +9,18 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+val localSigningProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun signingValue(environment: String, property: String): String? =
+    providers.environmentVariable(environment).orNull ?: localSigningProperties.getProperty(property)
+
+val releaseAbis = providers.gradleProperty("releaseAbis").orNull
+    ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinct()
+require(releaseAbis == null || (releaseAbis.isNotEmpty() && releaseAbis.all {
+    it in setOf("x86", "arm64-v8a", "armeabi-v7a")
+})) { "releaseAbis must contain only x86, arm64-v8a, or armeabi-v7a" }
+
 android {
     namespace = "com.houvven.guise"
     compileSdk {
@@ -30,19 +42,14 @@ android {
     }
     signingConfigs {
         create("release") {
-            enableV1Signing = true
+            // minSdk 26 supports APK Signature Scheme v2 and newer.
+            enableV1Signing = false
             enableV2Signing = true
             enableV3Signing = true
-            // local.properties is optional; required only for release signing.
-            // Create it from local.properties.example to sign release builds.
-            val localPropsFile = rootProject.file("local.properties")
-            if (localPropsFile.exists()) {
-                val properties = Properties().apply { localPropsFile.inputStream().use { load(it) } }
-                properties.getProperty("sign.store.file")?.let { storeFile = rootProject.file(it) }
-                storePassword = properties.getProperty("sign.store.password")
-                keyAlias = properties.getProperty("sign.key.alias")
-                keyPassword = properties.getProperty("sign.key.password")
-            }
+            signingValue("SIGNING_KEYSTORE_PATH", "sign.store.file")?.let { storeFile = rootProject.file(it) }
+            storePassword = signingValue("SIGNING_STORE_PASSWORD", "sign.store.password")
+            keyAlias = signingValue("SIGNING_KEY_ALIAS", "sign.key.alias")
+            keyPassword = signingValue("SIGNING_KEY_PASSWORD", "sign.key.password")
         }
     }
     buildTypes {
@@ -53,7 +60,15 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfigs.getByName("release").takeIf { it.storeFile != null && it.storePassword != null && it.keyAlias != null && it.keyPassword != null }?.let { signingConfig = it }
+            val releaseSigning = signingConfigs.getByName("release").takeIf {
+                it.storeFile != null && it.storePassword != null && it.keyAlias != null && it.keyPassword != null
+            }
+            if (providers.gradleProperty("requireReleaseSigning").orNull == "true") {
+                require(releaseSigning != null && releaseSigning.storeFile!!.isFile) {
+                    "Release publishing requires a complete release signing configuration"
+                }
+            }
+            releaseSigning?.let { signingConfig = it }
         }
     }
     compileOptions {
@@ -63,6 +78,18 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+    androidResources {
+        // The application currently provides English and Simplified Chinese.
+        localeFilters += listOf("en", "zh-rCN")
+    }
+    splits {
+        abi {
+            isEnable = releaseAbis != null
+            isUniversalApk = false
+            reset()
+            releaseAbis?.let { include(*it.toTypedArray()) }
+        }
     }
     packaging {
         resources {

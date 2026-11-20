@@ -18,6 +18,9 @@ key.properties
 keystore.properties
 *.jks
 *.keystore
+*.p12
+*.pfx
+*.dpapi
 
 # Packaged applications and signing sidecars
 *.apk
